@@ -50,14 +50,31 @@ jobs:
         echo "== Modules+DT layout =="
         ls -R ${{ env.MODULES_DT_DIR }} || true
 
+    - name: Sync OnePlus device trees into kernel tree
+      run: |
+        set -ex
+        VENDOR_DTS_DIR="${{ env.KERNEL_DIR }}/arch/arm64/boot/dts/vendor"
+        rm -rf "${VENDOR_DTS_DIR}"
+        mkdir -p "${VENDOR_DTS_DIR}"
+        cp -a "${{ env.MODULES_DT_DIR }}/kernel_platform/qcom/proprietary/devicetree/." "${VENDOR_DTS_DIR}/"
+        ls -R "${VENDOR_DTS_DIR}" || true
+
     - name: Prepare output directory
       run: mkdir -p ${{ env.OUT_DIR }}
 
-    - name: Build Devicetrees (DTBs)
-      working-directory: ${{ env.MODULES_DT_DIR }}
+    - name: Configure kernel (GKI + Pineapple)
+      working-directory: ${{ env.KERNEL_DIR }}
       run: |
         set -ex
-        make O=../${{ env.OUT_DIR }} dtbs V=1 2>&1 | tee ../dtb_build.log
+        ARCH=arm64 ./scripts/kconfig/merge_config.sh -O ../${{ env.OUT_DIR }} \
+          arch/arm64/configs/gki_defconfig \
+          arch/arm64/configs/vendor/pineapple_GKI.config
+
+    - name: Build Devicetrees (DTBs)
+      working-directory: ${{ env.KERNEL_DIR }}
+      run: |
+        set -ex
+        make O=../${{ env.OUT_DIR }} ARCH=arm64 dtbs V=1 2>&1 | tee ../dtb_build.log
         if [ ! -d ../${{ env.OUT_DIR }}/arch/arm64/boot/dts ]; then
           echo "❌ DTB output missing" >&2
           exit 1
@@ -68,7 +85,7 @@ jobs:
       working-directory: ${{ env.KERNEL_DIR }}
       run: |
         set -ex
-        make O=../${{ env.OUT_DIR }} -j$(nproc) V=1 2>&1 | tee ../kernel_build.log
+        make O=../${{ env.OUT_DIR }} ARCH=arm64 -j$(nproc) V=1 2>&1 | tee ../kernel_build.log
         ls -lh ../${{ env.OUT_DIR }}/arch/arm64/boot || true
 
     - name: Validate build outputs
