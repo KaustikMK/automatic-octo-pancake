@@ -50,13 +50,25 @@ jobs:
         echo "== Modules+DT layout =="
         ls -R ${{ env.MODULES_DT_DIR }} || true
 
+    - name: Validate expected source locations
+      run: |
+        set -euo pipefail
+        KERNEL_DTS_DIR="${{ env.KERNEL_DIR }}/arch/arm64/boot/dts"
+        MODULES_DTS_DIR="${{ env.MODULES_DT_DIR }}/kernel_platform/qcom/proprietary/devicetree"
+        echo "Expecting kernel DTS at: ${KERNEL_DTS_DIR}"
+        echo "Expecting modules DTS at: ${MODULES_DTS_DIR}"
+        test -d "${KERNEL_DTS_DIR}"
+        test -d "${MODULES_DTS_DIR}"
+        test -d "${MODULES_DTS_DIR}/qcom"
+        test -d "${MODULES_DTS_DIR}/oplus"
+
     - name: Sync OnePlus device trees into kernel tree
       run: |
         set -ex
         VENDOR_DTS_DIR="${{ env.KERNEL_DIR }}/arch/arm64/boot/dts/vendor"
         rm -rf "${VENDOR_DTS_DIR}"
         mkdir -p "${VENDOR_DTS_DIR}"
-        cp -a "${{ env.MODULES_DT_DIR }}/kernel_platform/qcom/proprietary/devicetree/." "${VENDOR_DTS_DIR}/"
+        rsync -a --delete "${{ env.MODULES_DT_DIR }}/kernel_platform/qcom/proprietary/devicetree/" "${VENDOR_DTS_DIR}/"
         ls -R "${VENDOR_DTS_DIR}" || true
 
     - name: Prepare output directory
