@@ -139,7 +139,8 @@ jobs:
     - name: Build Devicetrees (DTBs)
       working-directory: ${{ env.KERNEL_DIR }}
       run: |
-        set -ex
+        set -euo pipefail
+        set -x
         make O=../${{ env.OUT_DIR }} ARCH=arm64 dtbs V=1 2>&1 | tee ../dtb_build.log
         if [ ! -d ../${{ env.OUT_DIR }}/arch/arm64/boot/dts ]; then
           echo "❌ DTB output missing" >&2
@@ -150,7 +151,8 @@ jobs:
     - name: Build Kernel
       working-directory: ${{ env.KERNEL_DIR }}
       run: |
-        set -ex
+        set -euo pipefail
+        set -x
         make O=../${{ env.OUT_DIR }} ARCH=arm64 -j$(nproc) V=1 2>&1 | tee ../kernel_build.log
         ls -lh ../${{ env.OUT_DIR }}/arch/arm64/boot || true
 
