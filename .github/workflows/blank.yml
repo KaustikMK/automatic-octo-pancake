@@ -14,6 +14,7 @@ jobs:
       KERNEL_DIR: kernel
       MODULES_DT_DIR: modules_and_devicetree
       OUT_DIR: out
+      CROSS_COMPILE: aarch64-linux-gnu-
 
     steps:
     - name: Checkout workspace repo
@@ -39,6 +40,7 @@ jobs:
         sudo apt install -y \
           bc bison flex build-essential \
           libssl-dev libncurses-dev libelf-dev \
+          gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
           python3 clang llvm lld tree ccache
 
     - name: Print workspace layout (sanity check)
@@ -135,6 +137,12 @@ jobs:
         ARCH=arm64 ./scripts/kconfig/merge_config.sh -O ../${{ env.OUT_DIR }} \
           arch/arm64/configs/gki_defconfig \
           arch/arm64/configs/vendor/pineapple_GKI.config
+
+    - name: Finalize kernel config defaults
+      working-directory: ${{ env.KERNEL_DIR }}
+      run: |
+        set -ex
+        make O=../${{ env.OUT_DIR }} ARCH=arm64 CROSS_COMPILE=${{ env.CROSS_COMPILE }} olddefconfig
 
     - name: Build Devicetrees (DTBs)
       working-directory: ${{ env.KERNEL_DIR }}
