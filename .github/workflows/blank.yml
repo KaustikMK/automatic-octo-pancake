@@ -53,8 +53,20 @@ jobs:
     - name: Prepare output directory
       run: mkdir -p ${{ env.OUT_DIR }}
 
+    - name: Link device tree sources into kernel tree
+      run: |
+        set -ex
+        if [ ! -e "${{ env.KERNEL_DIR }}/qcom" ]; then
+          ln -s "../${{ env.MODULES_DT_DIR }}/kernel_platform/qcom" "${{ env.KERNEL_DIR }}/qcom"
+        fi
+        if [ ! -e "${{ env.KERNEL_DIR }}/qcom/proprietary/devicetree" ]; then
+          echo "❌ Expected devicetree source missing" >&2
+          ls -la "${{ env.KERNEL_DIR }}/qcom/proprietary" || true
+          exit 1
+        fi
+
     - name: Build Devicetrees (DTBs)
-      working-directory: ${{ env.MODULES_DT_DIR }}
+      working-directory: ${{ env.KERNEL_DIR }}
       run: |
         set -ex
         make O=../${{ env.OUT_DIR }} dtbs V=1 2>&1 | tee ../dtb_build.log
