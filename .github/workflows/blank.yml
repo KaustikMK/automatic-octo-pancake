@@ -38,7 +38,7 @@ jobs:
         sudo apt update
         sudo apt install -y \
           bc bison flex build-essential \
-          libssl-dev libncurses-dev \
+          libssl-dev libncurses-dev libelf-dev \
           python3 clang llvm lld tree ccache
 
     - name: Print workspace layout (sanity check)
@@ -50,14 +50,80 @@ jobs:
         echo "== Modules+DT layout =="
         ls -R ${{ env.MODULES_DT_DIR }} || true
 
+    - name: Validate expected source locations
+      run: |
+        set -euo pipefail
+        KERNEL_DTS_DIR="${{ env.KERNEL_DIR }}/arch/arm64/boot/dts"
+        MODULES_DTS_DIR="${{ env.MODULES_DT_DIR }}/kernel_platform/qcom/proprietary/devicetree"
+        MODULES_OPLUS_KERNEL_DIR="${{ env.MODULES_DT_DIR }}/vendor/oplus/kernel"
+        WORKSPACE_OPLUS_KERNEL_DIR="vendor/oplus/kernel"
+        MODULES_QCOM_DISPLAY_DIR="${{ env.MODULES_DT_DIR }}/vendor/qcom/opensource/display-drivers/oplus"
+        MODULES_OPLUS_MDMRST_DIR="${{ env.MODULES_DT_DIR }}/vendor/oplus/hardware/radio/mdmrst/common"
+        WORKSPACE_QCOM_DISPLAY_DIR="vendor/qcom/opensource/display-drivers/oplus"
+        echo "Expecting kernel DTS at: ${KERNEL_DTS_DIR}"
+        echo "Expecting modules DTS at: ${MODULES_DTS_DIR}"
+        echo "Expecting vendor oplus kernel sources at: ${MODULES_OPLUS_KERNEL_DIR}"
+        echo "Expecting workspace vendor oplus kernel dir at: ${WORKSPACE_OPLUS_KERNEL_DIR}"
+        echo "Expecting qcom display drivers at: ${MODULES_QCOM_DISPLAY_DIR}"
+        echo "Expecting oplus mdmrst sources at: ${MODULES_OPLUS_MDMRST_DIR}"
+        test -d "${KERNEL_DTS_DIR}"
+        test -d "${MODULES_DTS_DIR}"
+        test -d "${MODULES_DTS_DIR}/qcom"
+        test -d "${MODULES_DTS_DIR}/oplus"
+        test -d "${MODULES_OPLUS_KERNEL_DIR}/cpu"
+        test -d "${MODULES_QCOM_DISPLAY_DIR}/common/trackpoint"
+        test -d "${MODULES_OPLUS_MDMRST_DIR}"
+        test -d "${WORKSPACE_OPLUS_KERNEL_DIR}/cpu" || true
+
     - name: Sync OnePlus device trees into kernel tree
       run: |
         set -ex
         VENDOR_DTS_DIR="${{ env.KERNEL_DIR }}/arch/arm64/boot/dts/vendor"
         rm -rf "${VENDOR_DTS_DIR}"
         mkdir -p "${VENDOR_DTS_DIR}"
-        cp -a "${{ env.MODULES_DT_DIR }}/kernel_platform/qcom/proprietary/devicetree/." "${VENDOR_DTS_DIR}/"
+        rsync -a --delete "${{ env.MODULES_DT_DIR }}/kernel_platform/qcom/proprietary/devicetree/" "${VENDOR_DTS_DIR}/"
         ls -R "${VENDOR_DTS_DIR}" || true
+
+    - name: Sync Oplus kernel sources into workspace
+      run: |
+        set -ex
+        OPLUS_KERNEL_DIR="vendor/oplus/kernel"
+        mkdir -p "${OPLUS_KERNEL_DIR}"
+        rsync -a --delete "${{ env.MODULES_DT_DIR }}/vendor/oplus/kernel/" "${OPLUS_KERNEL_DIR}/"
+        ls -R "${OPLUS_KERNEL_DIR}" || true
+
+    - name: Sync Oplus display drivers into workspace
+      run: |
+        set -ex
+        QCOM_DISPLAY_DIR="vendor/qcom/opensource/display-drivers/oplus"
+        mkdir -p "${QCOM_DISPLAY_DIR}"
+        rsync -a --delete "${{ env.MODULES_DT_DIR }}/vendor/qcom/opensource/display-drivers/oplus/" "${QCOM_DISPLAY_DIR}/"
+        ls -R "${QCOM_DISPLAY_DIR}/common/trackpoint" || true
+
+    - name: Sync Oplus mdmrst sources into workspace
+      run: |
+        set -ex
+        OPLUS_MDMRST_DIR="vendor/oplus/hardware/radio/mdmrst/common"
+        mkdir -p "${OPLUS_MDMRST_DIR}"
+        rsync -a --delete "${{ env.MODULES_DT_DIR }}/vendor/oplus/hardware/radio/mdmrst/common/" "${OPLUS_MDMRST_DIR}/"
+        ls -R "${OPLUS_MDMRST_DIR}" || true
+
+    - name: Normalize vendor symlinks in kernel tree
+      run: |
+        set -ex
+        ROOT_DIR="$(pwd)"
+        while IFS= read -r -d '' link; do
+          target="$(readlink "${link}")"
+          if [[ "${target}" == *"/vendor/oplus/"* ]]; then
+            suffix="${target#*vendor/}"
+            ln -sf "${ROOT_DIR}/vendor/${suffix}" "${link}"
+            ls -l "${link}"
+          elif [[ "${target}" == *"/vendor/qcom/"* ]]; then
+            suffix="${target#*vendor/}"
+            ln -sf "${ROOT_DIR}/vendor/${suffix}" "${link}"
+            ls -l "${link}"
+          fi
+        done < <(find "${{ env.KERNEL_DIR }}" -type l -print0)
 
     - name: Prepare output directory
       run: mkdir -p ${{ env.OUT_DIR }}
@@ -73,7 +139,8 @@ jobs:
     - name: Build Devicetrees (DTBs)
       working-directory: ${{ env.KERNEL_DIR }}
       run: |
-        set -ex
+        set -euo pipefail
+        set -x
         make O=../${{ env.OUT_DIR }} ARCH=arm64 dtbs V=1 2>&1 | tee ../dtb_build.log
         if [ ! -d ../${{ env.OUT_DIR }}/arch/arm64/boot/dts ]; then
           echo "❌ DTB output missing" >&2
@@ -84,7 +151,8 @@ jobs:
     - name: Build Kernel
       working-directory: ${{ env.KERNEL_DIR }}
       run: |
-        set -ex
+        set -euo pipefail
+        set -x
         make O=../${{ env.OUT_DIR }} ARCH=arm64 -j$(nproc) V=1 2>&1 | tee ../kernel_build.log
         ls -lh ../${{ env.OUT_DIR }}/arch/arm64/boot || true
 
