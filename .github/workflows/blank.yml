@@ -56,14 +56,17 @@ jobs:
         KERNEL_DTS_DIR="${{ env.KERNEL_DIR }}/arch/arm64/boot/dts"
         MODULES_DTS_DIR="${{ env.MODULES_DT_DIR }}/kernel_platform/qcom/proprietary/devicetree"
         MODULES_OPLUS_KERNEL_DIR="${{ env.MODULES_DT_DIR }}/vendor/oplus/kernel"
+        WORKSPACE_OPLUS_KERNEL_DIR="vendor/oplus/kernel"
         echo "Expecting kernel DTS at: ${KERNEL_DTS_DIR}"
         echo "Expecting modules DTS at: ${MODULES_DTS_DIR}"
         echo "Expecting vendor oplus kernel sources at: ${MODULES_OPLUS_KERNEL_DIR}"
+        echo "Expecting workspace vendor oplus kernel dir at: ${WORKSPACE_OPLUS_KERNEL_DIR}"
         test -d "${KERNEL_DTS_DIR}"
         test -d "${MODULES_DTS_DIR}"
         test -d "${MODULES_DTS_DIR}/qcom"
         test -d "${MODULES_DTS_DIR}/oplus"
         test -d "${MODULES_OPLUS_KERNEL_DIR}/cpu"
+        test -d "${WORKSPACE_OPLUS_KERNEL_DIR}/cpu" || true
 
     - name: Sync OnePlus device trees into kernel tree
       run: |
@@ -74,13 +77,22 @@ jobs:
         rsync -a --delete "${{ env.MODULES_DT_DIR }}/kernel_platform/qcom/proprietary/devicetree/" "${VENDOR_DTS_DIR}/"
         ls -R "${VENDOR_DTS_DIR}" || true
 
-    - name: Sync Oplus kernel sources into kernel tree
+    - name: Sync Oplus kernel sources into workspace
       run: |
         set -ex
-        OPLUS_KERNEL_DIR="${{ env.KERNEL_DIR }}/vendor/oplus/kernel"
+        OPLUS_KERNEL_DIR="vendor/oplus/kernel"
         mkdir -p "${OPLUS_KERNEL_DIR}"
         rsync -a --delete "${{ env.MODULES_DT_DIR }}/vendor/oplus/kernel/" "${OPLUS_KERNEL_DIR}/"
         ls -R "${OPLUS_KERNEL_DIR}" || true
+
+    - name: Fix Oplus CPU symlink in kernel tree
+      run: |
+        set -ex
+        TARGET_DIR="../vendor/oplus/kernel/cpu"
+        SYMLINK_PATH="${{ env.KERNEL_DIR }}/oplus_cpu"
+        rm -f "${SYMLINK_PATH}"
+        ln -s "${TARGET_DIR}" "${SYMLINK_PATH}"
+        ls -l "${SYMLINK_PATH}"
 
     - name: Prepare output directory
       run: mkdir -p ${{ env.OUT_DIR }}
