@@ -41,6 +41,14 @@ jobs:
           libssl-dev libncurses-dev \
           python3 clang llvm lld tree ccache
 
+    - name: Link OnePlus devicetree sources into kernel tree
+      run: |
+        set -ex
+        rm -rf ${{ env.KERNEL_DIR }}/qcom
+        rm -rf ${{ env.KERNEL_DIR }}/oplus
+        ln -s ../${{ env.MODULES_DT_DIR }}/kernel_platform/qcom ${{ env.KERNEL_DIR }}/qcom
+        ln -s ../${{ env.MODULES_DT_DIR }}/kernel_platform/oplus ${{ env.KERNEL_DIR }}/oplus
+
     - name: Print workspace layout (sanity check)
       run: |
         echo "== WORKSPACE TREE (level 3) =="
@@ -49,15 +57,18 @@ jobs:
         ls -R ${{ env.KERNEL_DIR }}/arch/arm64/boot || true
         echo "== Modules+DT layout =="
         ls -R ${{ env.MODULES_DT_DIR }} || true
+        echo "== Kernel qcom devicetree path =="
+        ls -R ${{ env.KERNEL_DIR }}/qcom/proprietary/devicetree/qcom | head -n 50 || true
 
     - name: Prepare output directory
       run: mkdir -p ${{ env.OUT_DIR }}
 
     - name: Build Devicetrees (DTBs)
-      working-directory: ${{ env.MODULES_DT_DIR }}
+      working-directory: ${{ env.KERNEL_DIR }}
       run: |
         set -ex
-        make O=../${{ env.OUT_DIR }} dtbs V=1 2>&1 | tee ../dtb_build.log
+        make O=../${{ env.OUT_DIR }} ARCH=arm64 oplus_debug_defconfig
+        make O=../${{ env.OUT_DIR }} ARCH=arm64 dtbs V=1 2>&1 | tee ../dtb_build.log
         if [ ! -d ../${{ env.OUT_DIR }}/arch/arm64/boot/dts ]; then
           echo "❌ DTB output missing" >&2
           exit 1
@@ -68,7 +79,7 @@ jobs:
       working-directory: ${{ env.KERNEL_DIR }}
       run: |
         set -ex
-        make O=../${{ env.OUT_DIR }} -j$(nproc) V=1 2>&1 | tee ../kernel_build.log
+        make O=../${{ env.OUT_DIR }} ARCH=arm64 -j$(nproc) V=1 2>&1 | tee ../kernel_build.log
         ls -lh ../${{ env.OUT_DIR }}/arch/arm64/boot || true
 
     - name: Validate build outputs
