@@ -50,14 +50,27 @@ jobs:
         echo "== Modules+DT layout =="
         ls -R ${{ env.MODULES_DT_DIR }} || true
 
+    - name: Link vendor devicetree into kernel source
+      run: |
+        set -ex
+        VENDOR_DT_SRC="${{ env.MODULES_DT_DIR }}/kernel_platform/qcom/proprietary/devicetree"
+        VENDOR_DT_DEST="${{ env.KERNEL_DIR }}/arch/arm64/boot/dts/vendor"
+        if [ ! -d "${VENDOR_DT_SRC}" ]; then
+          echo "❌ Expected vendor devicetree path missing: ${VENDOR_DT_SRC}" >&2
+          exit 1
+        fi
+        rm -rf "${VENDOR_DT_DEST}"
+        ln -s "${PWD}/${VENDOR_DT_SRC}" "${VENDOR_DT_DEST}"
+        ls -la "${VENDOR_DT_DEST}" || true
+
     - name: Prepare output directory
       run: mkdir -p ${{ env.OUT_DIR }}
 
     - name: Build Devicetrees (DTBs)
-      working-directory: ${{ env.MODULES_DT_DIR }}
+      working-directory: ${{ env.KERNEL_DIR }}
       run: |
         set -ex
-        make O=../${{ env.OUT_DIR }} dtbs V=1 2>&1 | tee ../dtb_build.log
+        make O=../${{ env.OUT_DIR }} ARCH=arm64 dtbs V=1 2>&1 | tee ../dtb_build.log
         if [ ! -d ../${{ env.OUT_DIR }}/arch/arm64/boot/dts ]; then
           echo "❌ DTB output missing" >&2
           exit 1
@@ -68,7 +81,7 @@ jobs:
       working-directory: ${{ env.KERNEL_DIR }}
       run: |
         set -ex
-        make O=../${{ env.OUT_DIR }} -j$(nproc) V=1 2>&1 | tee ../kernel_build.log
+        make O=../${{ env.OUT_DIR }} ARCH=arm64 -j$(nproc) V=1 2>&1 | tee ../kernel_build.log
         ls -lh ../${{ env.OUT_DIR }}/arch/arm64/boot || true
 
     - name: Validate build outputs
