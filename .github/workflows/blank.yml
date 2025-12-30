@@ -59,6 +59,31 @@ jobs:
         cp -a "${{ env.MODULES_DT_DIR }}/kernel_platform/qcom/proprietary/devicetree/." "${VENDOR_DTS_DIR}/"
         ls -R "${VENDOR_DTS_DIR}" || true
 
+    - name: Sync OnePlus kernel overlays (OPlus CPU)
+      run: |
+        set -ex
+        OPLUS_CPU_SRC=""
+        for candidate in \
+          "${{ env.MODULES_DT_DIR }}/kernel/oplus_cpu" \
+          "${{ env.MODULES_DT_DIR }}/kernel_platform/oplus_cpu" \
+          "${{ env.MODULES_DT_DIR }}/kernel_platform/qcom/proprietary/oplus_cpu" \
+          "${{ env.MODULES_DT_DIR }}/oplus_cpu"; do
+          if [ -d "${candidate}" ]; then
+            OPLUS_CPU_SRC="${candidate}"
+            break
+          fi
+        done
+        if [ -z "${OPLUS_CPU_SRC}" ]; then
+          echo "❌ Could not locate oplus_cpu in modules/devicetree repo" >&2
+          exit 1
+        fi
+        mkdir -p "${{ env.KERNEL_DIR }}/kernel"
+        rsync -a "${OPLUS_CPU_SRC}" "${{ env.KERNEL_DIR }}/kernel/"
+        if [ ! -f "${{ env.KERNEL_DIR }}/kernel/oplus_cpu/sched/Kconfig" ]; then
+          echo "❌ kernel/oplus_cpu/sched/Kconfig missing after sync" >&2
+          exit 1
+        fi
+
     - name: Prepare output directory
       run: mkdir -p ${{ env.OUT_DIR }}
 
