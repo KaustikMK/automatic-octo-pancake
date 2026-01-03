@@ -1,184 +1,119 @@
-name: Build OnePlus SM8650 Kernel + Devicetree (Upstream 16.x)
+name: Build LineageOS OnePlus 12 (waffle) — bootimage
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
-  pull_request:
+    inputs:
+      branch:
+        description: "LineageOS branch"
+        required: true
+        default: "lineage-23.0"
 
 jobs:
   build:
     runs-on: ubuntu-22.04
 
     env:
-      KERNEL_DIR: kernel
-      MODULES_DT_DIR: modules_and_devicetree
-      OUT_DIR: out
-      LLVM: "1"
-      LLVM_IAS: "1"
+      USE_CCACHE: 1
+      CCACHE_EXEC: /usr/bin/ccache
+      DEVICE_CODENAME: waffle
+      LOS_BRANCH: ${{ github.event.inputs.branch }}
+      ANDROID_HOME: ${{ github.workspace }}/android/lineage
 
     steps:
-    - name: Checkout workspace repo
-      uses: actions/checkout@v4
+      - name: Checkout workflow repo
+        uses: actions/checkout@v4
 
-    - name: Checkout Kernel repo (correct branch)
-      uses: actions/checkout@v4
-      with:
-        repository: OnePlusOSS/android_kernel_oneplus_sm8650
-        ref: oneplus/sm8650_b_16.0.0_oneplus12
-        path: ${{ env.KERNEL_DIR }}
+      - name: Install build dependencies
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc bison build-essential ccache curl flex g++-multilib gcc-multilib \
+            git git-lfs gnupg gperf imagemagick protobuf-compiler python3-protobuf \
+            lib32readline-dev lib32z1-dev libdw-dev libelf-dev libgnutls28-dev \
+            lz4 libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync \
+            schedtool squashfs-tools xsltproc zip zlib1g-dev lib32ncurses5-dev \
+            libncurses5 libncurses5-dev openjdk-11-jdk python-is-python3 virtualenv
 
-    - name: Checkout Modules + Devicetree repo (correct branch)
-      uses: actions/checkout@v4
-      with:
-        repository: OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_sm8650
-        ref: oneplus/sm8650_b_16.0.0_oneplus12
-        path: ${{ env.MODULES_DT_DIR }}
+          git lfs install
+          ccache -M 50G
+          ccache -o compression=true
 
-    - name: Install build dependencies
-      run: |
-        sudo apt update
-        sudo apt install -y \
-          bc bison flex build-essential \
-          libssl-dev libncurses-dev libelf-dev \
-          python3 clang llvm lld tree ccache
+      - name: Prepare directories
+        run: |
+          mkdir -p ~/bin
+          mkdir -p $ANDROID_HOME
 
-    - name: Print workspace layout (sanity check)
-      run: |
-        echo "== WORKSPACE TREE (level 3) =="
-        tree -L 3 || true
-        echo "== Kernel arch layout =="
-        ls -R ${{ env.KERNEL_DIR }}/arch/arm64/boot || true
-        echo "== Modules+DT layout =="
-        ls -R ${{ env.MODULES_DT_DIR }} || true
+      - name: Install repo tool
+        run: |
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          chmod a+x ~/bin/repo
+          echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
+          source ~/.bashrc
 
-    - name: Validate expected source locations
-      run: |
-        set -euo pipefail
-        KERNEL_DTS_DIR="${{ env.KERNEL_DIR }}/arch/arm64/boot/dts"
-        MODULES_DTS_DIR="${{ env.MODULES_DT_DIR }}/kernel_platform/qcom/proprietary/devicetree"
-        MODULES_OPLUS_KERNEL_DIR="${{ env.MODULES_DT_DIR }}/vendor/oplus/kernel"
-        WORKSPACE_OPLUS_KERNEL_DIR="vendor/oplus/kernel"
-        MODULES_QCOM_DISPLAY_DIR="${{ env.MODULES_DT_DIR }}/vendor/qcom/opensource/display-drivers/oplus"
-        MODULES_OPLUS_MDMRST_DIR="${{ env.MODULES_DT_DIR }}/vendor/oplus/hardware/radio/mdmrst/common"
-        WORKSPACE_QCOM_DISPLAY_DIR="vendor/qcom/opensource/display-drivers/oplus"
-        echo "Expecting kernel DTS at: ${KERNEL_DTS_DIR}"
-        echo "Expecting modules DTS at: ${MODULES_DTS_DIR}"
-        echo "Expecting vendor oplus kernel sources at: ${MODULES_OPLUS_KERNEL_DIR}"
-        echo "Expecting workspace vendor oplus kernel dir at: ${WORKSPACE_OPLUS_KERNEL_DIR}"
-        echo "Expecting qcom display drivers at: ${MODULES_QCOM_DISPLAY_DIR}"
-        echo "Expecting oplus mdmrst sources at: ${MODULES_OPLUS_MDMRST_DIR}"
-        test -d "${KERNEL_DTS_DIR}"
-        test -d "${MODULES_DTS_DIR}"
-        test -d "${MODULES_DTS_DIR}/qcom"
-        test -d "${MODULES_DTS_DIR}/oplus"
-        test -d "${MODULES_OPLUS_KERNEL_DIR}/cpu"
-        test -d "${MODULES_QCOM_DISPLAY_DIR}/common/trackpoint"
-        test -d "${MODULES_OPLUS_MDMRST_DIR}"
-        test -d "${WORKSPACE_OPLUS_KERNEL_DIR}/cpu" || true
+      - name: Initialize LineageOS repo
+        working-directory: ${{ env.ANDROID_HOME }}
+        run: |
+          repo init -u https://github.com/LineageOS/android.git -b $LOS_BRANCH --git-lfs --no-clone-bundle
 
-    - name: Sync OnePlus device trees into kernel tree
-      run: |
-        set -ex
-        VENDOR_DTS_DIR="${{ env.KERNEL_DIR }}/arch/arm64/boot/dts/vendor"
-        rm -rf "${VENDOR_DTS_DIR}"
-        mkdir -p "${VENDOR_DTS_DIR}"
-        rsync -a --delete "${{ env.MODULES_DT_DIR }}/kernel_platform/qcom/proprietary/devicetree/" "${VENDOR_DTS_DIR}/"
-        ls -R "${VENDOR_DTS_DIR}" || true
+      - name: Cache repo source
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ANDROID_HOME }}
+          key: repo-${{ env.LOS_BRANCH }}
 
-    - name: Sync Oplus kernel sources into workspace
-      run: |
-        set -ex
-        OPLUS_KERNEL_DIR="vendor/oplus/kernel"
-        mkdir -p "${OPLUS_KERNEL_DIR}"
-        rsync -a --delete "${{ env.MODULES_DT_DIR }}/vendor/oplus/kernel/" "${OPLUS_KERNEL_DIR}/"
-        ls -R "${OPLUS_KERNEL_DIR}" || true
+      - name: Sync sources
+        working-directory: ${{ env.ANDROID_HOME }}
+        run: |
+          repo sync -c -j4 --force-sync --no-clone-bundle --no-tags
 
-    - name: Sync Oplus display drivers into workspace
-      run: |
-        set -ex
-        QCOM_DISPLAY_DIR="vendor/qcom/opensource/display-drivers/oplus"
-        mkdir -p "${QCOM_DISPLAY_DIR}"
-        rsync -a --delete "${{ env.MODULES_DT_DIR }}/vendor/qcom/opensource/display-drivers/oplus/" "${QCOM_DISPLAY_DIR}/"
-        ls -R "${QCOM_DISPLAY_DIR}/common/trackpoint" || true
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ env.LOS_BRANCH }}-${{ env.DEVICE_CODENAME }}
+          restore-keys: |
+            ccache-
 
-    - name: Sync Oplus mdmrst sources into workspace
-      run: |
-        set -ex
-        OPLUS_MDMRST_DIR="vendor/oplus/hardware/radio/mdmrst/common"
-        mkdir -p "${OPLUS_MDMRST_DIR}"
-        rsync -a --delete "${{ env.MODULES_DT_DIR }}/vendor/oplus/hardware/radio/mdmrst/common/" "${OPLUS_MDMRST_DIR}/"
-        ls -R "${OPLUS_MDMRST_DIR}" || true
+      - name: Setup build environment
+        working-directory: ${{ env.ANDROID_HOME }}
+        run: |
+          source build/envsetup.sh
 
-    - name: Normalize vendor symlinks in kernel tree
-      run: |
-        set -ex
-        ROOT_DIR="$(pwd)"
-        while IFS= read -r -d '' link; do
-          target="$(readlink "${link}")"
-          if [[ "${target}" == *"/vendor/oplus/"* ]]; then
-            suffix="${target#*vendor/}"
-            ln -sf "${ROOT_DIR}/vendor/${suffix}" "${link}"
-            ls -l "${link}"
-          elif [[ "${target}" == *"/vendor/qcom/"* ]]; then
-            suffix="${target#*vendor/}"
-            ln -sf "${ROOT_DIR}/vendor/${suffix}" "${link}"
-            ls -l "${link}"
+      - name: Download proprietary blob ZIP
+        run: |
+          mkdir -p ~/blobs
+          cd ~/blobs
+          wget https://mirrorbits.lineageos.org/full/waffle/20260101/lineage-23.0-20260101-nightly-waffle-signed.zip
+
+      - name: Extract proprietary blobs (if extract script exists)
+        working-directory: ${{ env.ANDROID_HOME }}
+        run: |
+          set -e
+          DEVICE_DIR=$(find device -type d -path "*/${DEVICE_CODENAME}" | head -n1 || true)
+          if [ -n "$DEVICE_DIR" ] && [ -f "$DEVICE_DIR/extract-files.py" ]; then
+            cd "$DEVICE_DIR"
+            ./extract-files.py ~/blobs/lineage-23.0-20260101-nightly-waffle-signed.zip
+          else
+            echo "No extract-files.py found — skipping blob extraction."
           fi
-        done < <(find "${{ env.KERNEL_DIR }}" -type l -print0)
 
-    - name: Prepare output directory
-      run: mkdir -p ${{ env.OUT_DIR }}
+      - name: Re-run breakfast
+        working-directory: ${{ env.ANDROID_HOME }}
+        run: |
+          source build/envsetup.sh
+          breakfast $DEVICE_CODENAME
 
-    - name: Configure kernel (GKI + Pineapple)
-      working-directory: ${{ env.KERNEL_DIR }}
-      run: |
-        set -ex
-        ARCH=arm64 ./scripts/kconfig/merge_config.sh -O ../${{ env.OUT_DIR }} \
-          arch/arm64/configs/gki_defconfig \
-          arch/arm64/configs/vendor/pineapple_GKI.config
-        make O=../${{ env.OUT_DIR }} ARCH=arm64 LLVM=${{ env.LLVM }} LLVM_IAS=${{ env.LLVM_IAS }} olddefconfig
+      - name: Build bootimage only
+        working-directory: ${{ env.ANDROID_HOME }}
+        run: |
+          source build/envsetup.sh
+          croot
+          mka bootimage
 
-    - name: Build Devicetrees (DTBs)
-      working-directory: ${{ env.KERNEL_DIR }}
-      run: |
-        set -euo pipefail
-        set -x
-        make O=../${{ env.OUT_DIR }} ARCH=arm64 LLVM=${{ env.LLVM }} LLVM_IAS=${{ env.LLVM_IAS }} dtbs V=1 2>&1 | tee ../dtb_build.log
-        if [ ! -d ../${{ env.OUT_DIR }}/arch/arm64/boot/dts ]; then
-          echo "❌ DTB output missing" >&2
-          exit 1
-        fi
-        find ../${{ env.OUT_DIR }}/arch/arm64/boot/dts -type f
-
-    - name: Build Kernel
-      working-directory: ${{ env.KERNEL_DIR }}
-      run: |
-        set -euo pipefail
-        set -x
-        make O=../${{ env.OUT_DIR }} ARCH=arm64 LLVM=${{ env.LLVM }} LLVM_IAS=${{ env.LLVM_IAS }} WERROR=0 -j$(nproc) V=1 2>&1 | tee ../kernel_build.log
-        ls -lh ../${{ env.OUT_DIR }}/arch/arm64/boot || true
-
-    - name: Validate build outputs
-      run: |
-        if [ ! -f ${{ env.OUT_DIR }}/arch/arm64/boot/Image ]; then
-          echo "❌ Kernel image missing" >&2
-          exit 1
-        fi
-        if [ ! -d ${{ env.OUT_DIR }}/arch/arm64/boot/dts ]; then
-          echo "❌ DTS directory missing" >&2
-          exit 1
-        fi
-
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: sm8650-build-results
-        path: |
-          out/**
-          dtb_build.log
-          kernel_build.log
-          ${{ env.KERNEL_DIR }}/.config
-          ${{ env.KERNEL_DIR }}/Makefile
-          ${{ env.MODULES_DT_DIR }}/Makefile
-        if-no-files-found: warn
+      - name: Upload EVERYTHING from product output
+        uses: actions/upload-artifact@v4
+        with:
+          name: waffle-out
+          path: ${{ env.ANDROID_HOME }}/out/target/product/${{ env.DEVICE_CODENAME }}/
+          if-no-files-found: warn
