@@ -1,0 +1,39 @@
+name: Build TI-84 Plus CE SMBEMU
+
+on:
+  push:
+    paths:
+      - "SMBEMU/**"
+      - ".github/workflows/build-ti84.yml"
+  pull_request:
+    paths:
+      - "SMBEMU/**"
+      - ".github/workflows/build-ti84.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install CEdev toolchain
+        run: |
+          curl -L https://github.com/CE-Programming/toolchain/releases/download/v14.1/CEdev-Linux.tar.gz -o cedev.tar.gz
+          tar -xzf cedev.tar.gz -C "$HOME"
+          echo "$HOME/CEdev/bin" >> "$GITHUB_PATH"
+          echo "CEDEV=$HOME/CEdev" >> "$GITHUB_ENV"
+
+      - name: Build SMBEMU
+        working-directory: SMBEMU
+        run: make
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: SMBEMU-build
+          path: |
+            SMBEMU/bin/*
+          if-no-files-found: error
