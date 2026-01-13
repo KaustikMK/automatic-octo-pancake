@@ -68,7 +68,8 @@ static void ppu_write_register(nes_t *nes, uint16_t addr, uint8_t value) {
 
 uint8_t nes_cpu_read(nes_t *nes, uint16_t addr) {
     if (addr < 0x2000) {
-        return nes->ram[addr & 0x7FF];
+        uint16_t ram_index = (uint16_t)(addr % 0x0800u);
+        return nes->ram[ram_index];
     }
     if (addr < 0x4000) {
         return ppu_read_register(nes, addr);
@@ -88,7 +89,8 @@ uint8_t nes_cpu_read(nes_t *nes, uint16_t addr) {
 
 void nes_cpu_write(nes_t *nes, uint16_t addr, uint8_t value) {
     if (addr < 0x2000) {
-        nes->ram[addr & 0x7FF] = value;
+        uint16_t ram_index = (uint16_t)(addr % 0x0800u);
+        nes->ram[ram_index] = value;
         return;
     }
     if (addr < 0x4000) {
@@ -96,7 +98,7 @@ void nes_cpu_write(nes_t *nes, uint16_t addr, uint8_t value) {
         return;
     }
     if (addr == 0x4014) {
-        uint16_t base = (uint16_t)value << 8;
+        uint16_t base = (uint16_t)value * 0x0100u;
         for (uint16_t i = 0; i < 256; i++) {
             nes->ppu.oam[i] = nes_cpu_read(nes, base + i);
         }
