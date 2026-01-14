@@ -33,9 +33,10 @@ static bool validate_header(const ines_header_t *header, const char **error) {
 
 bool rom_load_smb(nes_t *nes, const char **error) {
     *error = NULL;
-    ti_var_t handle = ti_Open("SMBROM", "r");
+    const char *appvar_name = "SMBROM";
+    ti_var_t handle = ti_Open(appvar_name, "r");
     if (!handle) {
-        *error = "SMBROM AppVar not found";
+        *error = "SMBROM AppVar (SMBROM.8xv) not found";
         return false;
     }
     ines_header_t header;
