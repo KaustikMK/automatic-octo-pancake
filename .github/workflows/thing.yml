@@ -23,7 +23,7 @@ jobs:
       run: |
         git clone https://github.com/OnePlusOSS/android_kernel_oneplus_sm8650 kernel
         cd kernel
-        git checkout <BRANCH>
+        git branch
 
     - name: Configure kernel
       run: |
