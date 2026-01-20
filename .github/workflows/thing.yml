@@ -17,7 +17,7 @@ jobs:
         sudo apt install -y \
           bc bison build-essential flex git \
           libelf-dev libssl-dev dwarves \
-          ccache python3
+          ccache python3 clang
 
     - name: Clone kernel
       run: |
