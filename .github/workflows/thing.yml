@@ -1,0 +1,50 @@
+name: OnePlus 12 Kernel Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Cleanup
+      uses: rokibhasansagar/slimhub_actions@main
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y \
+          bc bison build-essential flex git \
+          libelf-dev libssl-dev dwarves \
+          ccache python3
+
+    - name: Clone kernel
+      run: |
+        git clone https://github.com/OnePlusOSS/android_kernel_oneplus_sm8650 kernel
+        cd kernel
+        git checkout <BRANCH>
+
+    - name: Configure kernel
+      run: |
+        cd kernel
+        export ARCH=arm64
+        export SUBARCH=arm64
+        export CC=clang
+        export LLVM=1
+        make O=out vendor/waffle_defconfig
+
+    - name: Build kernel
+      run: |
+        cd kernel
+        make O=out -j$(nproc)
+
+    - name: Collect artifacts
+      run: |
+        mkdir artifacts
+        cp kernel/out/arch/arm64/boot/Image artifacts/
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: OP12-kernel
+        path: artifacts/*
